@@ -21,25 +21,35 @@ async function send() {
         console.log(error)
     }
 }
-function connectToPeer(peer, room_code) {
-    return fetch("https://rendezvous-huzh.onrender.com/join", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            "room_code": room_code
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            throw new Error("Room doesn't exist")
-        }
-        let conn = peer.connect(data.peer_id);
-        return new Promise(resolve => {
-            conn.on("open", () => resolve(conn));
+
+const cache = {
+    peers: {}
+}
+
+async function connectToPeer(peer, room_code) {
+    let peer_id = cache.peers[room_code];
+
+    if (!peer_id) {
+        const response = await fetch("https://rendezvous-huzh.onrender.com/join", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                room_code: room_code
+            })
         });
+
+        const data = await response.json();
+        peer_id = data.peer_id;
+
+        cache.peers[room_code] = peer_id;
+    }
+
+    const conn = peer.connect(peer_id);
+
+    return new Promise(resolve => {
+        conn.on("open", () => resolve(conn));
     });
 }
 
