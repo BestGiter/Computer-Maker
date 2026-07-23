@@ -32,7 +32,7 @@ function connectToPeer(peer, room_code) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.peer_id === undefined) {
+        if (!data.success) {
             throw new Error("Room doesn't exist")
         }
         let conn = peer.connect(data.peer_id);
@@ -60,7 +60,9 @@ peer.on("open", id => {
         your_box.textContent = data.room_code
     })
 })
-
+peer.on("error", err => {
+    console.log(err)
+})
 peer.on("connection", conn => {
     conn.on("data", data => {
         let message = document.createElement("h1")
