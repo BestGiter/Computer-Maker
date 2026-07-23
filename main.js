@@ -16,6 +16,7 @@ async function send() {
     try {
         let conn = await connectToPeer(peer, code_box.value)
         conn.send({text: message_box.value})
+        conn.close()
     } catch (error) {
         console.log(error)
     }
