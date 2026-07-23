@@ -10,6 +10,7 @@ function getPeerId() {
 }
 const message_box = document.getElementById("message-box")
 const code_box = document.getElementById("room-code-box")
+const your_box = document.getElementById("your-code-box")
 
 async function send() {
     try {
@@ -56,12 +57,13 @@ peer.on("open", id => {
     .then(response => response.json())
     .then(data => {
         console.log(data.room_code)
+        your_box.textContent = data.room_code
     })
 })
 
 peer.on("connection", conn => {
     conn.on("data", data => {
-        let message = document.createElement("p")
+        let message = document.createElement("h1")
         message.textContent = data.text
         document.body.appendChild(message)
     })
