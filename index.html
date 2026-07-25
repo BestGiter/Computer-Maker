@@ -2,13 +2,31 @@
 <html>
     <head>
     <style>
+        html, body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #game {
+            position: absolute;
+            display: block;
+        }
+        #code {
+            position: absolute;
+            bottom: 0px;
+            width: 100px;
+        }
+        #name {
+            position: absolute;
+            bottom: 0px;
+            left: 100px;
+            width: 100px;
+        }
     </style>
     </head>
     <body>
-        <h1 id="your-code-box"></h1>
-        <input id="room-code-box"></input>
-        <input id="message-box"></input>
-        <button id="send-button" onclick="send()">Send</button>
+        <canvas id="game" tabindex="0"></canvas>
+        <input id="code">
+        <input id="name">
         <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
         <script src="main.js"></script>
     </body>
