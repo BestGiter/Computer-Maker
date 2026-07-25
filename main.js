@@ -27,25 +27,66 @@ let world = {
         0: {
             name: "AND",
             x: 0,
-            y: 0,
+            y: 100,
             id: 0,
-            value: 1
+            value: 0
         },
         1: {
             name: "NOT",
             x: -100,
             y: 0,
             id: 1,
-            value: 1
+            value: 0
         },
+        4: {
+            name: "LEVER",
+            x: -200,
+            y: 0,
+            id: 4,
+            value: 0,
+            enabled: 0
+        }
     },
     wires: {  // this will be like id: {from: id1, to: id2, id: id, value: value}
         2: {
             _from: 1,
             _to: 0,
             id: 2
+        },
+        3: {
+            _from: 4,
+            _to: 1,
+            id: 3
         }
     }
+}
+let currentId = 5;
+let nextId = 5;
+function newGate(name, x, y, value = 0, idoff = 0) {
+    let id = currentId+idoff;
+    world.gates[id] = {
+        name: name,
+        x: x,
+        y: y,
+        value: value,
+        id: id
+    };
+    return id;
+}
+function newWire(_from, _to, idoff = 0) {
+    let id = currentId+idoff;
+    world.wires[id] = {
+        _from: _from,
+        _to: _to,
+        id: id
+    }
+    return id;
+}
+function reserve(step) {
+    nextId += step;
+}
+function step() {
+    currentId = nextId;
 }
 function downloadWorld(world) {
     const data = JSON.stringify(world, null, 2);
@@ -60,6 +101,16 @@ function downloadWorld(world) {
     a.click();
 
     URL.revokeObjectURL(url);
+}
+function getGateAt(x, y) {
+    for (const gate of Object.values(world.gates)) {
+        if (gate.x <= x && x < gate.x+50) {
+            if (gate.y <= y && y < gate.y+50) {
+                return gate;
+            }
+        }
+    }
+    return null;
 }
 const picker = document.getElementById("filePicker");
 
@@ -166,6 +217,15 @@ function handleHost(peer_id, data) {
                 zoom: data.zoom
             });
         }
+    } else if (data.type == "clickgate") {
+        console.log("clickgate", data.id);
+        let gate = world.gates[data.id];
+        if (gate === undefined) {
+            return
+        }
+        if (gate.name == "LEVER") {
+            gate.enabled = gate.enabled!==undefined ? 1-gate.enabled : 1;
+        }   
     }
 }
 peer.on("connection", conn => {
@@ -233,7 +293,7 @@ function drawGate(name, color, x, y) {
     ctx.fillText(name, x, y+50);
 }
 function drawWire(x1, y1, x2, y2, value) {
-    ctx.strokeStyle = value ? "white" : "grey";
+    ctx.strokeStyle = value===undefined ? "pink" : (value ? "white" : "grey");
     ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(x1+50, y1+25);
@@ -245,12 +305,19 @@ const colors = {
     OR: "green",
     NOT: "blue"
 }
+const bicolors = {
+    LEVER: ["grey", "white"]
+}
 function drawWorld() {
     for (const w of Object.values(world.wires)) {
         drawWire(world.gates[w._from].x, world.gates[w._from].y, world.gates[w._to].x, world.gates[w._to].y, world.gates[w._from].value);
     }
     for (const g of Object.values(world.gates)) {
-        drawGate(g.name, colors[g.name], g.x, g.y)
+        let col = colors[g.name];
+        if (col === undefined) {
+            col = bicolors[g.name][g.value];
+        }
+        drawGate(g.name, col, g.x, g.y)
     }
 }
 function gameloop() {
@@ -273,14 +340,29 @@ function gameloop() {
         }
         let inputs = {};
         for (const gate of Object.values(world.gates)) {
-            inputs[gate.id] = {};
+            inputs[gate.id] = [];
         }
         for (const wire of Object.values(world.wires)) {
-            inputs[world.gates[wire._to].id] = world.gates[wire._from].value;
+            inputs[world.gates[wire._to].id].push(world.gates[wire._from].value);
         }
         for (const gate of Object.values(world.gates)) {
             let output = 1;
-            gate.value = output;
+            let invert = false;
+            for (const input of inputs[gate.id]) {
+                if (gate.name == "AND") {
+                    output = output * input;
+                } else if (gate.name == "OR") {
+                    output = Math.max(output - input, 0);
+                    invert = true;
+                } else if (gate.name == "NOT") {
+                    output = Math.max(output - input, 0);
+                }
+            }
+            if (gate.name == "LEVER") {
+                output = gate.enabled;
+                invert = false;
+            }
+            gate.value = invert ? 1-output : output;
         }
         
     }
@@ -310,6 +392,16 @@ function resize() {
 }
 
 window.addEventListener("resize", resize);
+canvas.addEventListener("mousedown", e => {
+    const gate = getGateAt(mouse.x, mouse.y);
+    if (gate === null) {
+        return
+    }
+    sendToHost(host, {
+        type: "clickgate",
+        id: gate.id
+    });
+});
 canvas.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
 
