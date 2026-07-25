@@ -21,12 +21,18 @@
             left: 100px;
             width: 100px;
         }
+        #open {
+            position: absolute;
+            right: 0px;
+        }
     </style>
     </head>
     <body>
         <canvas id="game" tabindex="0"></canvas>
         <input id="code">
         <input id="name">
+        <input id="filePicker" type="file" hidden>
+        <button id="open">Open</button>
         <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
         <script src="main.js"></script>
     </body>

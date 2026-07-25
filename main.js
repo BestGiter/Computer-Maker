@@ -11,11 +11,70 @@ function getPeerId() {
     return id;
 }
 const your_box = document.getElementById("your-code-box")
-
+function sendToHost(host, data) {
+    if (!host) {
+        handleHost(getPeerId(), data)
+    } else {
+        host.send(data)
+    }
+}
 const cache = {
     peers: {}
 }
 
+let world = {
+    gates: {  // this will be like id: {name: name, id: id, value: value, x: x, y: y}
+        0: {
+            name: "AND",
+            x: 0,
+            y: 0,
+            id: 0,
+            value: 1
+        },
+        1: {
+            name: "NOT",
+            x: -100,
+            y: 0,
+            id: 1,
+            value: 1
+        },
+    },
+    wires: {  // this will be like id: {from: id1, to: id2, id: id, value: value}
+        2: {
+            _from: 1,
+            _to: 0,
+            id: 2
+        }
+    }
+}
+function downloadWorld(world) {
+    const data = JSON.stringify(world, null, 2);
+
+    const blob = new Blob([data], { type: "application/json" });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "world.json";
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+const picker = document.getElementById("filePicker");
+
+document.getElementById("open").onclick = () => {
+    picker.click();
+};
+
+picker.onchange = async () => {
+    const file = picker.files[0];
+    console.log(file.name);
+
+    const text = await file.text();
+    const json = JSON.parse(text)
+    
+};
 async function connectToPeer(peer, room_code) {
     let conn2 = cache.peers[room_code];
     let conn = null;
@@ -74,45 +133,49 @@ peer.on("error", err => {
 })
 let players = [];
 let connections = [];
+function handleHost(peer_id, data) {
+    if (data.type == "join") {
+        players.push({
+            name: data.name,
+            peer_id: peer_id,
+            x: 0,
+            y: 0,
+            zoom: 1
+        });
+    } else if (data.type == "leave") {
+        let player = players.find(p => p.peer_id === peer_id);
+
+        let index = players.indexOf(player);
+
+        if (index !== -1) {
+            players.splice(index, 1);
+        }
+    } else if (data.type == "cursor") {
+        let player = players.find(p => p.peer_id === peer_id);
+
+        let index = players.indexOf(player);
+
+        if (index !== -1) {
+            players.splice(index, 1);
+            let name = player.name;
+            players.push({
+                name: name,
+                peer_id: peer_id,
+                x: data.x,
+                y: data.y,
+                zoom: data.zoom
+            });
+        }
+    }
+}
 peer.on("connection", conn => {
     connections.push(conn)
     conn.on("close", () => {
         connections = connections.filter(x => x !== conn);
     })
+    // request handling
     conn.on("data", data => {
-        if (data.type == "join") {
-            players.push({
-                name: data.name,
-                peer_id: conn.peer,
-                x: 0,
-                y: 0,
-                zoom: 1
-            });
-        } else if (data.type == "leave") {
-            let player = players.find(p => p.peer_id === conn.peer);
-
-            let index = players.indexOf(player);
-
-            if (index !== -1) {
-                players.splice(index, 1);
-            }
-        } else if (data.type == "cursor") {
-            let player = players.find(p => p.peer_id === conn.peer);
-
-            let index = players.indexOf(player);
-
-            if (index !== -1) {
-                players.splice(index, 1);
-                let name = player.name;
-                players.push({
-                    name: name,
-                    peer_id: conn.peer,
-                    x: data.x,
-                    y: data.y,
-                    zoom: data.zoom
-                });
-            }
-        }
+        handleHost(conn.peer, data)
     })
 })
 
@@ -177,16 +240,22 @@ function drawWire(x1, y1, x2, y2, value) {
     ctx.lineTo(x2, y2+25);
     ctx.stroke();
 }
+const colors = {
+    AND: "red",
+    OR: "green",
+    NOT: "blue"
+}
 function drawWorld() {
-    drawWire(200, 100, 400, 200, 1)
-    drawWire(100, 400, 200, 100, 0)
-    drawGate("AND", "red", 200, 100);
-    drawGate("OR", "green", 400, 200);
-    drawGate("NOT", "blue", 100, 400);
+    for (const w of Object.values(world.wires)) {
+        drawWire(world.gates[w._from].x, world.gates[w._from].y, world.gates[w._to].x, world.gates[w._to].y, world.gates[w._from].value);
+    }
+    for (const g of Object.values(world.gates)) {
+        drawGate(g.name, colors[g.name], g.x, g.y)
+    }
 }
 function gameloop() {
     if (host) {
-        host.send({
+        sendToHost(host, {
             type: "cursor",
             x: mouse.x,
             y: mouse.y,
@@ -198,9 +267,22 @@ function gameloop() {
             cursors = cursors.filter(x => x.peer_id !== conn.peer);
             conn.send({
                 type: "replication",
-                players: cursors
+                players: cursors,
+                state: world
             });
         }
+        let inputs = {};
+        for (const gate of Object.values(world.gates)) {
+            inputs[gate.id] = {};
+        }
+        for (const wire of Object.values(world.wires)) {
+            inputs[world.gates[wire._to].id] = world.gates[wire._from].value;
+        }
+        for (const gate of Object.values(world.gates)) {
+            let output = 1;
+            gate.value = output;
+        }
+        
     }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -250,20 +332,22 @@ const enter = async e => {
     if (e.key === "Enter") {
         try {
             if (host) {
-                host.send({
+                sendToHost(host, {
                     type: "leave"
                 })
             }
             let conn = await connectToPeer(peer, input.value)
             myname = input2.value;
-            conn.send({
+            sendToHost(conn, {
                 type: "join",
                 name: myname
             })
             host = conn;
+            // response handling
             host.on("data", data => {
                 if (data.type == "replication") {
                     players = data.players
+                    world = data.state
                 }
             })
         } catch (error) {
