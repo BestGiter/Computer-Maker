@@ -10,15 +10,23 @@
             position: absolute;
             display: block;
         }
+        button, input {
+            background-color: black;
+            color: white;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
         #code {
             position: absolute;
             bottom: 0px;
+            height: 40px;
             width: 100px;
         }
         #name {
             position: absolute;
             bottom: 0px;
             left: 100px;
+            height: 40px;
             width: 100px;
         }
         #open {
@@ -55,8 +63,8 @@
     </head>
     <body>
         <canvas id="game" tabindex="0"></canvas>
-        <input id="code">
-        <input id="name">
+        <input id="code" placeholder="Code...">
+        <input id="name" placeholder="Name...">
         <div id="create"></div>
         <button id="createGate" onclick="create_gate()">Create gate</button>
         <button id="wireGates" onclick="wire_gates()">Wire gates</button>
