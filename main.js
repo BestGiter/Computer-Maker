@@ -73,6 +73,37 @@ function newGate(name, x, y, value = 0, idoff = 0) {
     };
     return id;
 }
+let menu = false;
+let create_menu = document.getElementById("create");
+function create_gate() {
+    menu = !menu;
+    if (menu) {
+        let i = 0;
+        for (const gate of ["AND", "OR", "NOT", "LEVER"]) {
+            let button = document.createElement("button");
+            button.innerHTML = gate;
+            button.style.position = "absolute";
+            button.style.bottom = String((i+1)*40)+"px"
+            button.classList.add("option");
+            button.onclick = () => {
+                const converted = toScreen({
+                    x: canvas.width/2,
+                    y: canvas.height/2
+                }, camera)
+                sendToHost(host, {
+                    type: "creategate",
+                    name: gate,
+                    x: converted.x,
+                    y: converted.y
+                })
+            };
+            create_menu.appendChild(button);
+            i++;
+        }
+    } else {
+        create_menu.innerHTML = "";
+    }
+}
 function newWire(_from, _to, idoff = 0) {
     let id = currentId+idoff;
     world.wires[id] = {
@@ -81,6 +112,11 @@ function newWire(_from, _to, idoff = 0) {
         id: id
     }
     return id;
+}
+function wire_gates() {
+    reserve(1);
+    newWire(wiring_from, wiring_to, 0);
+    step();
 }
 function reserve(step) {
     nextId += step;
@@ -112,20 +148,20 @@ function getGateAt(x, y) {
     }
     return null;
 }
-const picker = document.getElementById("filePicker");
+//const picker = document.getElementById("filePicker");
 
-document.getElementById("open").onclick = () => {
-    picker.click();
-};
+//document.getElementById("open").onclick = () => {
+    //picker.click();
+//};
 
-picker.onchange = async () => {
-    const file = picker.files[0];
-    console.log(file.name);
+//picker.onchange = async () => {
+    //const file = picker.files[0];
+    //console.log(file.name);
 
-    const text = await file.text();
-    const json = JSON.parse(text)
+    //const text = await file.text();
+    //const json = JSON.parse(text)
     
-};
+//};
 async function connectToPeer(peer, room_code) {
     let conn2 = cache.peers[room_code];
     let conn = null;
@@ -226,6 +262,14 @@ function handleHost(peer_id, data) {
         if (gate.name == "LEVER") {
             gate.enabled = gate.enabled!==undefined ? 1-gate.enabled : 1;
         }   
+    } else if (data.type == "creategate") {
+        reserve(1);
+        newGate(data.name, data.x, data.y, 0, 0);
+        step();
+    } else if (data.type == "wiregates") {
+        reserve(1);
+        newWire(data._from, data._to, )
+        step();
     }
 }
 peer.on("connection", conn => {
