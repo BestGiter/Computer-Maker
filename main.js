@@ -106,6 +106,13 @@ function create_gate() {
         create_menu.innerHTML = "";
     }
 }
+let delete_mode = false;
+function delete_gate() {
+    delete_mode = !delete_mode;
+    wiring_mode = false;
+    wiring_from = null;
+    wiring_to = null;
+}
 function newWire(_from, _to, idoff = 0) {
     let id = currentId+idoff;
     world.wires[id] = {
@@ -117,7 +124,8 @@ function newWire(_from, _to, idoff = 0) {
 }
 let wiring_mode = false;
 function wire_gates() {
-    wiring_mode = true;
+    wiring_mode = !wiring_mode;
+    delete_mode = false;
 }
 function reserve(step) {
     nextId += step;
@@ -277,6 +285,13 @@ function handleHost(peer_id, data) {
         reserve(1);
         newWire(data._from, data._to, 0)
         step();
+    } else if (data.type == "deletegate") {
+        for (const w of Object.values(world.wires)) {
+            if (w._from == data.id || w._to == data.id) {
+                delete world.wires[w.id];
+            }
+        }
+        delete world.gates[data.id];
     }
 }
 peer.on("connection", conn => {
@@ -472,15 +487,7 @@ canvas.addEventListener("mousedown", e => {
     if (gate === null) {
         return
     }
-    if (!wiring_mode) {
-        if (gate === null) {
-            return
-        }
-        sendToHost(host, {
-            type: "clickgate",
-            id: gate.id
-        });
-    } else {
+    if (wiring_mode) {
         if (wiring_from === null) {
             wiring_from = gate.id;
         } else if (wiring_to === null) {
@@ -494,6 +501,19 @@ canvas.addEventListener("mousedown", e => {
             wiring_from = null;
             wiring_to = null;
         }
+    } else if (delete_mode) {
+        sendToHost(host, {
+            type: "deletegate",
+            id: gate.id
+        });
+    } else {
+        if (gate === null) {
+            return
+        }
+        sendToHost(host, {
+            type: "clickgate",
+            id: gate.id
+        });
     }
 });
 canvas.addEventListener("mousemove", e => {
