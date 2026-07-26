@@ -330,6 +330,8 @@ function drawCursor(players) {
         let screenmouse = Tmouse;
         ctx.arc(screenmouse.x, screenmouse.y, 5/Tmouse.zoom, 0, Math.PI * 2);
         ctx.fill();
+        ctx.font = "bold 30px monospace";
+        ctx.fillText(Tmouse.name, screenmouse.x-5/Tmouse.zoom, screenmouse.y-5/Tmouse.zoom);
     }
     ctx.fillStyle = "white";
     ctx.beginPath();
