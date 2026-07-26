@@ -1,5 +1,7 @@
 room_code = "";
 host = null;
+let wiring_from = null;
+let wiring_to = null;
 function getPeerId() {
     let id = localStorage.getItem("peer_id");
 
@@ -113,10 +115,9 @@ function newWire(_from, _to, idoff = 0) {
     }
     return id;
 }
+let wiring_mode = false;
 function wire_gates() {
-    reserve(1);
-    newWire(wiring_from, wiring_to, 0);
-    step();
+    wiring_mode = true;
 }
 function reserve(step) {
     nextId += step;
@@ -267,8 +268,14 @@ function handleHost(peer_id, data) {
         newGate(data.name, data.x, data.y, 0, 0);
         step();
     } else if (data.type == "wiregates") {
+        for (const w of Object.values(world.wires)) {
+            if (w._from == data._from && w._to == data._to) {
+                delete world.wires[w.id];
+                return
+            }
+        }
         reserve(1);
-        newWire(data._from, data._to, )
+        newWire(data._from, data._to, 0)
         step();
     }
 }
@@ -314,6 +321,7 @@ function drawUI() {
     ctx.fillStyle = "white";
     ctx.font = "bold 30px monospace";
     ctx.fillText("Room: " + my_room_code, 20, 40);
+    ctx.fillRect(canvas.width/2-10, canvas.height/2-10, 20, 20);
 }
 function drawCursor(players) {
     for (const Tmouse of players) {
@@ -364,6 +372,15 @@ function drawWorld() {
         drawGate(g.name, col, g.x, g.y)
     }
 }
+const keys = {};
+
+window.addEventListener("keydown", e => {
+    keys[e.key] = true;
+});
+
+window.addEventListener("keyup", e => {
+    keys[e.key] = false;
+});
 function gameloop() {
     if (host) {
         sendToHost(host, {
@@ -403,12 +420,24 @@ function gameloop() {
                 }
             }
             if (gate.name == "LEVER") {
-                output = gate.enabled;
+                output = gate.enabled!==undefined ? gate.enabled : 0;
                 invert = false;
             }
             gate.value = invert ? 1-output : output;
         }
         
+    }
+    if (keys["w"]) {
+        camera.y += 10/camera.zoom;
+    }
+    if (keys["s"]) {
+        camera.y -= 10/camera.zoom;
+    }
+    if (keys["a"]) {
+        camera.x += 10/camera.zoom;
+    }
+    if (keys["d"]) {
+        camera.x -= 10/camera.zoom;
     }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -441,10 +470,29 @@ canvas.addEventListener("mousedown", e => {
     if (gate === null) {
         return
     }
-    sendToHost(host, {
-        type: "clickgate",
-        id: gate.id
-    });
+    if (!wiring_mode) {
+        if (gate === null) {
+            return
+        }
+        sendToHost(host, {
+            type: "clickgate",
+            id: gate.id
+        });
+    } else {
+        if (wiring_from === null) {
+            wiring_from = gate.id;
+        } else if (wiring_to === null) {
+            wiring_to = gate.id;
+            wiring_mode = false;
+            sendToHost(host, {
+                type: "wiregates",
+                _from: wiring_from,
+                _to: wiring_to
+            });
+            wiring_from = null;
+            wiring_to = null;
+        }
+    }
 });
 canvas.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
@@ -460,8 +508,6 @@ canvas.addEventListener("mousemove", e => {
 canvas.addEventListener("contextmenu", e => {
     e.preventDefault();
 });
-canvas.addEventListener("keydown", e => {
-})
 const input = document.getElementById("code");
 const input2 = document.getElementById("name");
 const enter = async e => {
