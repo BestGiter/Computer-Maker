@@ -697,22 +697,25 @@ canvas.addEventListener("touchstart", e => {
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
 });
-canvas.addEventListener("touchmove", e => {
-    e.preventDefault();
-    Ptouches = Ctouches;
-    Ctouches = [...e.touches];
-});
-function touchEnd(e) {
-    e.preventDefault();
-    Ptouches = Ctouches;
-    Ctouches = [...e.touches];
-    for (const touch of e.changedTouches) {
+function touchMove(e) {
+    for (const touch of e.touches) {
         if (touch.identifier === primary) {
             const pos = getTouchPos(touch);
             mouseUpdate(pos.x, pos.y);
             clickHandle();
         }
     }
+}
+canvas.addEventListener("touchmove", e => {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
+    touchMove(e);
+});
+function touchEnd(e) {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
 }
 canvas.addEventListener("touchend", e => {
     touchEnd(e);
