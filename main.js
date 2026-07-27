@@ -707,7 +707,7 @@ function touchEnd(e) {
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
     for (const touch of e.changedTouches) {
-        if (touch.identifier === primaryTouch) {
+        if (touch.identifier === primary) {
             const pos = getTouchPos(touch);
             mouseUpdate(pos.x, pos.y);
             clickHandle();
