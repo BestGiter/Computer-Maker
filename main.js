@@ -4,6 +4,7 @@ let wiring_from = null;
 let wiring_to = null;
 let Ptouches = [];
 let Ctouches = [];
+const post = document.getElementById("post");
 let smouse = {
     x: 0,
     y: 0
@@ -336,7 +337,7 @@ peer.on("connection", conn => {
     })
 })
 
-const canvas = document.getElementById("game")
+const canvas = document.getElementById("game");
 let ctx = {};
 let mode = "normal";
 let myname = "host";
@@ -364,27 +365,34 @@ function toScreen(thing, camera) {
     };
 }
 function drawVignette() {
-    const gradient = ctx.createRadialGradient(
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.height * 0.3,
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.height * 0.8
+    const gradient = ctx2.createRadialGradient(
+        post.width / 2,
+        post.height / 2,
+        post.height * 0.3,
+        post.width / 2,
+        post.height / 2,
+        post.height * 1
     );
 
     gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.4)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.7)");
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx2.fillStyle = gradient;
+    ctx2.fillRect(0, 0, post.width, post.height);
+}
+function drawScanlines() {
+    ctx2.fillStyle = "rgba(0,0,0,0.15)";
+
+    for (let y = 0; y < post.height; y += 4) {
+        ctx2.fillRect(0, y, post.width, 2);
+    }
 }
 function drawUI() {
     ctx.fillStyle = "white";
     ctx.font = "bold 30px monospace";
     ctx.fillText("Room: " + my_room_code, 20, 40);
     ctx.strokeStyle = "white";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(canvas.width/2-10, canvas.height/2);
     ctx.lineTo(canvas.width/2+10, canvas.height/2);
@@ -619,6 +627,7 @@ function gameloop() {
     }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx2.clearRect(0, 0, post.width, post.height);
     ctx.save();
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
@@ -626,12 +635,14 @@ function gameloop() {
     drawWorld();
     drawCursor(players);
     ctx.restore();
-    drawVignette();
     drawUI();
+    drawScanlines();
+    drawVignette();
     requestAnimationFrame(gameloop);
 }
 canvas.addEventListener("mouseenter", () => {
     canvas.style.cursor = "none";
+    canvas.focus()
 });
 
 canvas.addEventListener("mouseleave", () => {
@@ -642,10 +653,14 @@ function resize() {
     canvas.height = window.innerHeight;
     ctx = canvas.getContext("2d");
     ctx.font = "bold 30px monospace";
+    post.width = window.innerWidth;
+    post.height = window.innerHeight;
+    ctx2 = post.getContext("2d");
+    ctx2.font = "bold 30px monospace";
 }
 function clickHandle() {
     if (move_mode) {
-        if (moving) {
+        if (moving !== null) {
             sendToHost(host, {
                 type: "movegate",
                 id: moving,
@@ -654,8 +669,8 @@ function clickHandle() {
             });
             moving = null;
             move_mode = false;
+            return
         }
-        return
     }
     const gate = getGateAt(mouse.x, mouse.y);
     if (gate === null) {
@@ -809,6 +824,9 @@ canvas.addEventListener("touchend", e => {
 });
 canvas.addEventListener("touchcancel", e => {
     touchEnd(e);
+});
+document.addEventListener("mousedown", e => {
+    console.log("document down:", e.target);
 });
 resize();
 canvas.focus()

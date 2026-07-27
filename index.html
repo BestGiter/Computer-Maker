@@ -11,10 +11,16 @@
             display: block;
             touch-action: none;
         }
+        #post {
+            position: absolute;
+            display: block;
+            touch-action: none;
+            pointer-events: none;
+        }
         button, input {
             background-color: black;
             color: white;
-            border-radius: 10px;
+            border-radius: 0px;
             box-sizing: border-box;
         }
         #code {
@@ -68,6 +74,7 @@
         <button id="wireGates" class="toolbar-item" onclick="wire_gates()">Wire gates</button>
         <button id="deleteGate" class="toolbar-item" onclick="delete_gate()">Delete gate</button>
         <button id="moveGate" class="toolbar-item" onclick="move_gate()">Move gate</button>
+        <canvas id="post" tabindex="0"></canvas>
         <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
         <script src="main.js"></script>
     </body>
