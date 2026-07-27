@@ -549,6 +549,15 @@ function gameloop() {
             }
             gate.value = evaluate[gate.name](gate, inputs);
         }
+        for (const conn of connections) {                
+            let cursors = [mouse, ...players];
+            cursors = cursors.filter(x => x.peer_id !== conn.peer);
+            conn.send({
+                type: "replication",
+                players: cursors,
+                state: world
+            });
+        }
     }
     let moved = false;
     if (keys["w"]) {
