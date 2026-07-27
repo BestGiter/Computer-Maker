@@ -5,6 +5,7 @@ let wiring_to = null;
 let Ptouches = [];
 let Ctouches = [];
 const post = document.getElementById("post");
+const post2 = document.getElementById("post2");
 let smouse = {
     x: 0,
     y: 0
@@ -364,28 +365,213 @@ function toScreen(thing, camera) {
         y: thing.y*camera.zoom+camera.y
     };
 }
-function drawVignette() {
-    const gradient = ctx2.createRadialGradient(
-        post.width / 2,
-        post.height / 2,
-        post.height * 0.3,
-        post.width / 2,
-        post.height / 2,
-        post.height * 1
+
+
+let testProgram = null;
+let testBuffer = null;
+let screenTexture = null;
+
+function drawTest() {
+    if (!gl) return;
+
+    if (!testProgram) {
+        const vertexShaderSource = `
+            attribute vec2 position;
+
+            varying vec2 uv;
+
+            void main() {
+                uv = vec2(
+                    position.x * 0.5 + 0.5,
+                    1.0 - (position.y * 0.5 + 0.5)
+                );
+                gl_Position = vec4(position, 0.0, 1.0);
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision mediump float;
+
+            uniform sampler2D screenTexture;
+
+            varying vec2 uv;
+
+            void main() {
+                vec2 curvedUV = uv - 0.5; // move origin to center
+
+                float curve = 0.1;
+                float dist = dot(curvedUV, curvedUV);
+
+                curvedUV *= 1.0 + dist * curve;
+                float fade = 1.0-dist/2.0;
+
+                curvedUV += 0.5; // move origin back
+                if (curvedUV.x < 0.0 || curvedUV.x > 1.0
+                ||  curvedUV.y < 0.0 || curvedUV.y > 1.0) {
+                    // gl_FragColor = vec4(curve*dist/2.0, curve*dist/2.0, curve*dist/5.0, 1.0);
+                    gl_FragColor = vec4(curve*dist/1.0, curve*dist/1.0, curve*dist/1.0, 1.0);
+                    return;
+                }
+                vec4 col = texture2D(screenTexture, curvedUV);
+                float multiplier = 1000.0;
+                float pixel_bound = mod(curvedUV.x, 3.0/multiplier);
+                float scale = 10.0;
+                vec3 keeps = vec3(0.0, 0.0, 0.0);
+                float centered = (2.0*(pixel_bound-1.0/multiplier)*multiplier)/scale;
+                keeps.r += max(1.0 - (centered) * (centered), 0.0);
+                centered = (2.0*(pixel_bound-2.0/multiplier)*multiplier)/scale;
+                keeps.g += max(1.0-(centered*centered), 0.0);
+                centered = (2.0*(pixel_bound-3.0/multiplier)*multiplier)/scale;
+                keeps.b += max(1.0-(centered*centered), 0.0);
+                col.rgb *= keeps;
+                col.rgb *= fade;
+                gl_FragColor = col;
+            }
+        `;
+
+        function compileShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                return null;
+            }
+
+            return shader;
+        }
+
+        const vertexShader = compileShader(
+            gl.VERTEX_SHADER,
+            vertexShaderSource
+        );
+
+        const fragmentShader = compileShader(
+            gl.FRAGMENT_SHADER,
+            fragmentShaderSource
+        );
+
+        if (!vertexShader || !fragmentShader) return;
+
+        testProgram = gl.createProgram();
+
+        gl.attachShader(testProgram, vertexShader);
+        gl.attachShader(testProgram, fragmentShader);
+
+        gl.linkProgram(testProgram);
+
+        if (!gl.getProgramParameter(testProgram, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(testProgram));
+            return;
+        }
+
+        const vertices = new Float32Array([
+            -1, -1,
+             1, -1,
+            -1,  1,
+
+            -1,  1,
+             1, -1,
+             1,  1
+        ]);
+
+        testBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, testBuffer);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            vertices,
+            gl.STATIC_DRAW
+        );
+
+
+        // Create texture
+        screenTexture = gl.createTexture();
+
+        gl.bindTexture(gl.TEXTURE_2D, screenTexture);
+
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_WRAP_S,
+            gl.CLAMP_TO_EDGE
+        );
+
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_WRAP_T,
+            gl.CLAMP_TO_EDGE
+        );
+
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MIN_FILTER,
+            gl.LINEAR
+        );
+    }
+
+
+    // Copy the 2D canvas into the texture
+    gl.activeTexture(gl.TEXTURE0);
+
+    gl.bindTexture(gl.TEXTURE_2D, screenTexture);
+
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        canvas // <-- your normal 2D canvas
     );
 
-    gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.7)");
 
-    ctx2.fillStyle = gradient;
-    ctx2.fillRect(0, 0, post.width, post.height);
-}
-function drawScanlines() {
-    ctx2.fillStyle = "rgba(0,0,0,0.15)";
+    gl.viewport(
+        0,
+        0,
+        gl.canvas.width,
+        gl.canvas.height
+    );
+    gl.clearColor(0, 0, 0, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-    for (let y = 0; y < post.height; y += 4) {
-        ctx2.fillRect(0, y, post.width, 2);
-    }
+    gl.useProgram(testProgram);
+
+
+    // Tell shader which texture to use
+    const textureLocation =
+        gl.getUniformLocation(
+            testProgram,
+            "screenTexture"
+        );
+
+    gl.uniform1i(textureLocation, 0);
+
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, testBuffer);
+
+    const positionLocation =
+        gl.getAttribLocation(
+            testProgram,
+            "position"
+        );
+
+    gl.enableVertexAttribArray(positionLocation);
+
+    gl.vertexAttribPointer(
+        positionLocation,
+        2,
+        gl.FLOAT,
+        false,
+        0,
+        0
+    );
+
+
+    gl.drawArrays(
+        gl.TRIANGLES,
+        0,
+        6
+    );
 }
 function drawUI() {
     ctx.fillStyle = "white";
@@ -401,6 +587,75 @@ function drawUI() {
     ctx.moveTo(canvas.width/2, canvas.height/2-10);
     ctx.lineTo(canvas.width/2, canvas.height/2+10);
     ctx.stroke();
+    ctx.strokeStyle = "grey";
+    ctx.lineWidth = 4;
+    ctx.fillStyle = "grey";
+    
+    let size, val, currpos;
+    
+    ctx.strokeRect(0, canvas.height-40, 100, 40);
+    ctx.font = "bold 30px monospace";
+    val = input.value+" ";
+    size = ctx.measureText(val).width;
+    ctx.font = `bold ${100/size*30}px monospace`
+    currpos = 0;
+    i = 0;
+    for (const l of val) {
+        if (input.selectionStart <= i && i < input.selectionEnd) {
+            ctx.fillStyle = "blue";
+        } else {
+            ctx.fillStyle = "grey";
+        }
+        ctx.fillText(l, currpos, canvas.height-10);
+        if (input.selectionStart == i) {
+            ctx.fillStyle = "blue";
+            ctx.fillText("_", currpos, canvas.height-10);
+        }
+        currpos += ctx.measureText(l).width;
+        i += 1;
+    }
+    
+    ctx.strokeRect(100, canvas.height-40, 100, 40);
+    ctx.font = "bold 30px monospace";
+    val = input2.value+" ";
+    size = ctx.measureText(val).width;
+    ctx.font = `bold ${100/size*30}px monospace`
+    currpos = 100;
+    i = 0;
+    for (const l of val) {
+        if (input2.selectionStart <= i && i < input2.selectionEnd) {
+            ctx.fillStyle = "blue";
+        } else {
+            ctx.fillStyle = "grey";
+        }
+        ctx.fillText(l, currpos, canvas.height-10);
+        if (input2.selectionStart == i) {
+            ctx.fillStyle = "blue";
+            ctx.fillText("_", currpos, canvas.height-10);
+        }
+        currpos += ctx.measureText(l).width;
+        i += 1;
+    }
+    
+    ctx.fillStyle = "grey";
+    ctx.font = "bold 30px monospace";
+    ctx.strokeRect(canvas.width-100, canvas.height-40, 100, 40);
+    ctx.fillText("Create", canvas.width-100, canvas.height);
+    ctx.strokeRect(canvas.width-200, canvas.height-40, 100, 40);
+    if (menu) {
+        const gates = ["AND", "OR", "NOT", "LEVER", "BUFFER", "LASER"];
+        let i = 0;
+        for (const g of gates) {
+            ctx.fillText(g, canvas.width-100, canvas.height-(i+1)*40);
+            ctx.strokeRect(canvas.width-100, canvas.height-(i+2)*40, 100, 40);
+            i += 1;
+        }
+    }
+    ctx.fillText("Wire", canvas.width-200, canvas.height);
+    ctx.strokeRect(canvas.width-300, canvas.height-40, 100, 40);
+    ctx.fillText("Delete", canvas.width-300, canvas.height);
+    ctx.strokeRect(canvas.width-400, canvas.height-40, 100, 40);
+    ctx.fillText("Move", canvas.width-400, canvas.height);
 }
 function drawCursor(players) {
     for (const Tmouse of players) {
@@ -419,6 +674,7 @@ function drawCursor(players) {
     ctx.fill();
 }
 function drawGate(name, color, x, y, value) {
+    ctx.font = "bold 30px monospace";
     if (name == "LASER" && value == 1) {
         ctx.strokeStyle = "red";
         ctx.lineWidth = 5;
@@ -627,7 +883,6 @@ function gameloop() {
     }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx2.clearRect(0, 0, post.width, post.height);
     ctx.save();
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
@@ -636,27 +891,22 @@ function gameloop() {
     drawCursor(players);
     ctx.restore();
     drawUI();
-    drawScanlines();
-    drawVignette();
+    
+    drawTest();
     requestAnimationFrame(gameloop);
 }
-canvas.addEventListener("mouseenter", () => {
-    canvas.style.cursor = "none";
-    canvas.focus()
-});
 
-canvas.addEventListener("mouseleave", () => {
-    canvas.style.cursor = "default";
+canvas.addEventListener("mouseenter", () => {
+    canvas.focus()
 });
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     ctx = canvas.getContext("2d");
     ctx.font = "bold 30px monospace";
+    gl = post.getContext("webgl");
     post.width = window.innerWidth;
     post.height = window.innerHeight;
-    ctx2 = post.getContext("2d");
-    ctx2.font = "bold 30px monospace";
 }
 function clickHandle() {
     if (move_mode) {
@@ -723,7 +973,7 @@ function mouseUpdate(x, y) {
     mouse.zoom = camera.zoom;
     mouse.peer_id = getPeerId();
 }
-canvas.addEventListener("mousemove", e => {
+document.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
 
     const x = e.clientX - rect.left;
@@ -815,18 +1065,13 @@ canvas.addEventListener("touchmove", e => {
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
 });
-function touchEnd(e) {
+canvas.addEventListener("touchend", e => {
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
-}
-canvas.addEventListener("touchend", e => {
-    touchEnd(e);
 });
 canvas.addEventListener("touchcancel", e => {
-    touchEnd(e);
-});
-document.addEventListener("mousedown", e => {
-    console.log("document down:", e.target);
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
 });
 resize();
 canvas.focus()
