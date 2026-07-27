@@ -518,13 +518,13 @@ function gameloop() {
         camera.x -= 10/camera.zoom;
     }
     if (Ctouches.length === 2 && Ptouches.length === 2) {
-        const p1 = toWorld(getTouchPos(Ptouches[0]), camera);
-        const p2 = toWorld(getTouchPos(Ptouches[1]), camera);
-        const c1 = toWorld(getTouchPos(Ctouches[0]), camera);
-        const c2 = toWorld(getTouchPos(Ctouches[1]), camera);
+        const p1 = getTouchPos(Ptouches[0]);
+        const p2 = getTouchPos(Ptouches[1]);
+        const c1 = getTouchPos(Ctouches[0]);
+        const c2 = getTouchPos(Ctouches[1]);
         
-        const pmid = {x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2};
-        const cmid = {x: (c1.x + c2.x)/2, y: (c1.y + c2.y)/2};
+        const pmid = toWorld({x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2}, camera);
+        const cmid = toWorld({x: (c1.x + c2.x)/2, y: (c1.y + c2.y)/2}, camera);
         
         const pdis = Math.hypot(p2.x-p1.x, p2.y-p1.y);
         const cdis = Math.hypot(c2.x-c1.x, c2.y-c1.y);
