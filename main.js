@@ -644,6 +644,19 @@ function resize() {
     ctx.font = "bold 30px monospace";
 }
 function clickHandle() {
+    if (move_mode) {
+        if (moving) {
+            sendToHost(host, {
+                type: "movegate",
+                id: moving,
+                x: mouse.x,
+                y: mouse.y
+            });
+            moving = null;
+            move_mode = false;
+        }
+        return
+    }
     const gate = getGateAt(mouse.x, mouse.y);
     if (gate === null) {
         return
@@ -672,15 +685,6 @@ function clickHandle() {
     } else if (move_mode) {
         if (moving === null) {
             moving = gate.id;
-        } else {
-            sendToHost(host, {
-                type: "movegate",
-                id: moving,
-                x: mouse.x,
-                y: mouse.y
-            });
-            moving = null;
-            move_mode = false;
         }
     } else {
         if (gate === null) {
