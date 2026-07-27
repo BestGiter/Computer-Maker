@@ -702,7 +702,6 @@ function touchMove(e) {
         if (touch.identifier === primary) {
             const pos = getTouchPos(touch);
             mouseUpdate(pos.x, pos.y);
-            clickHandle();
         }
     }
 }
@@ -716,6 +715,12 @@ function touchEnd(e) {
     e.preventDefault();
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
+    
+    for (const touch of e.changedTouches) {
+        if (touch.identifier === primary) {
+            clickHandle();
+        }
+    }
 }
 canvas.addEventListener("touchend", e => {
     touchEnd(e);
