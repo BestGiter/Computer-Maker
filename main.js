@@ -4,6 +4,10 @@ let wiring_from = null;
 let wiring_to = null;
 let Ptouches = [];
 let Ctouches = [];
+let smouse = {
+    x: 0,
+    y: 0
+};
 function getPeerId() {
     let id = localStorage.getItem("peer_id");
 
@@ -66,6 +70,11 @@ let world = {
 }
 let currentId = 5;
 let nextId = 5;
+let needsUpdated = new Set();
+let nextNeedsUpdated = new Set(Object.keys(world.gates));
+function addUpdate(g) {
+    nextNeedsUpdated.add(g);
+}
 function newGate(name, x, y, value = 0, idoff = 0) {
     let id = currentId+idoff;
     world.gates[id] = {
@@ -75,6 +84,7 @@ function newGate(name, x, y, value = 0, idoff = 0) {
         value: value,
         id: id
     };
+    requestAnimationFrame(() => addUpdate(id));
     return id;
 }
 let menu = false;
@@ -83,7 +93,7 @@ function create_gate() {
     menu = !menu;
     if (menu) {
         let i = 0;
-        for (const gate of ["AND", "OR", "NOT", "LEVER", "BUFFER"]) {
+        for (const gate of ["AND", "OR", "NOT", "LEVER", "BUFFER", "LASER"]) {
             let button = document.createElement("button");
             button.innerHTML = gate;
             button.style.position = "absolute";
@@ -114,6 +124,16 @@ function delete_gate() {
     wiring_mode = false;
     wiring_from = null;
     wiring_to = null;
+    move_mode = false;
+}
+let move_mode = false;
+let moving = null;
+function move_gate() {
+    move_mode = !move_mode;
+    wiring_mode = false;
+    wiring_from = null;
+    wiring_to = null;
+    delete_mode = false;
 }
 function newWire(_from, _to, idoff = 0) {
     let id = currentId+idoff;
@@ -128,6 +148,7 @@ let wiring_mode = false;
 function wire_gates() {
     wiring_mode = !wiring_mode;
     delete_mode = false;
+    move_mode = false;
 }
 function reserve(step) {
     nextId += step;
@@ -272,6 +293,7 @@ function handleHost(peer_id, data) {
         }
         if (gate.name == "LEVER") {
             gate.enabled = gate.enabled!==undefined ? 1-gate.enabled : 1;
+            nextNeedsUpdated.add(gate.id);
         }   
     } else if (data.type == "creategate") {
         reserve(1);
@@ -283,17 +305,24 @@ function handleHost(peer_id, data) {
                 delete world.wires[w.id];
                 return
             }
-        }
+        }        
+        requestAnimationFrame(() => addUpdate(data._from));
+        requestAnimationFrame(() => addUpdate(data._to));
         reserve(1);
         newWire(data._from, data._to, 0)
         step();
     } else if (data.type == "deletegate") {
         for (const w of Object.values(world.wires)) {
             if (w._from == data.id || w._to == data.id) {
+                if (data.id !== w._from) requestAnimationFrame(() => addUpdate(w._from));
+                if (data.id !== w._to) requestAnimationFrame(() => addUpdate(w._to));
                 delete world.wires[w.id];
             }
         }
         delete world.gates[data.id];
+    } else if (data.type == "movegate") {
+        world.gates[data.id].x = data.x;
+        world.gates[data.id].y = data.y;
     }
 }
 peer.on("connection", conn => {
@@ -381,7 +410,23 @@ function drawCursor(players) {
     ctx.arc(screenmouse.x, screenmouse.y, 5/camera.zoom, 0, Math.PI * 2);
     ctx.fill();
 }
-function drawGate(name, color, x, y) {
+function drawGate(name, color, x, y, value) {
+    if (name == "LASER" && value == 1) {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(x+50, y+25);
+        let the_one = (canvas.width-camera.x)/camera.zoom;
+        for (const g of Object.values(world.gates)) {
+            if (g.y < y+25 && y+25 < g.y+50) {
+                if (g.x < the_one && g.x > x) {
+                    the_one = Math.max(g.x, x+50);
+                }
+            }
+        }
+        ctx.lineTo(the_one, y+25);
+        ctx.stroke();
+    }
     ctx.strokeStyle = color;
     ctx.lineWidth = 5;
     ctx.strokeRect(x, y, 50, 50);
@@ -403,7 +448,8 @@ const colors = {
 }
 const bicolors = {
     LEVER: ["grey", "white"],
-    BUFFER: ["grey", "white"]
+    BUFFER: ["grey", "white"],
+    LASER: ["grey", "white"]
 }
 function drawWorld() {
     for (const w of Object.values(world.wires)) {
@@ -414,7 +460,7 @@ function drawWorld() {
         if (col === undefined) {
             col = bicolors[g.name][g.value];
         }
-        drawGate(g.name, col, g.x, g.y)
+        drawGate(g.name, col, g.x, g.y, g.value)
     }
 }
 const keys = {};
@@ -454,6 +500,27 @@ function getTouchPos(touch) {
         y: touch.clientY-rect.top
     };
 }
+let evaluate = {
+    AND(gate, inputs) {
+        return +inputs.every(x => x == 1);
+    },
+    OR(gate, inputs) {
+        return +inputs.some(x => x == 1);
+    },
+    BUFFER(gate, inputs) {
+        return +inputs.some(x => x == 1);
+    },
+    LASER(gate, inputs) {
+        return +inputs.some(x => x == 1);
+    },
+    NOT(gate, inputs) {
+        return +!inputs.some(x => x == 1);
+    },
+    LEVER(gate, inputs) {
+        return gate.enabled !== undefined ? gate.enabled : 0;
+    },
+};
+let prevgates = {};
 function gameloop() {
     if (host) {
         sendToHost(host, {
@@ -463,59 +530,54 @@ function gameloop() {
             zoom: mouse.zoom
         })
     } else {
-        for (const conn of connections) {
-            let cursors = [mouse, ...players];
-            cursors = cursors.filter(x => x.peer_id !== conn.peer);
-            conn.send({
-                type: "replication",
-                players: cursors,
-                state: world
-            });
+        needsUpdated = nextNeedsUpdated;
+        nextNeedsUpdated = new Set();
+        if (needsUpdated.size > 0) {
+            prevgates = structuredClone(world.gates);
         }
-        let inputs = {};
-        for (const gate of Object.values(world.gates)) {
-            inputs[gate.id] = [];
-        }
-        for (const wire of Object.values(world.wires)) {
-            inputs[world.gates[wire._to].id].push(world.gates[wire._from].value);
-        }
-        for (const gate of Object.values(world.gates)) {
-            let output = 1;
-            let invert = false;
-            let zero = false;
-            if (gate.name == "OR" || gate.name == "BUFFER") {
-                zero = true;
-            }
-            for (const input of inputs[gate.id]) {
-                if (gate.name == "AND") {
-                    output = output * input;
-                } else if (gate.name == "OR" || gate.name == "BUFFER") {
-                    output = Math.max(output - input, 0);
-                    invert = true;
-                } else if (gate.name == "NOT") {
-                    output = Math.max(output - input, 0);
+        for (const g of needsUpdated) {
+            let gate = world.gates[g];
+            let inputs = [];
+            for (const w of Object.keys(world.wires)) {
+                let wire = world.wires[w];
+                if (wire._to == g) {
+                    inputs.push(prevgates[wire._from].value);
+                }
+                if (wire._from == g) {
+                    nextNeedsUpdated.add(wire._to);
                 }
             }
-            if (gate.name == "LEVER") {
-                output = gate.enabled!==undefined ? gate.enabled : 0;
-                invert = false;
-            }
-            let temp = invert ? 1-output : output;
-            gate.value = zero ? (inputs[gate.id].length === 0 ? 0 : temp) : temp;
+            gate.value = evaluate[gate.name](gate, inputs);
         }
-        
     }
+    let moved = false;
     if (keys["w"]) {
         camera.y += 10/camera.zoom;
+        moved = true;
     }
     if (keys["s"]) {
         camera.y -= 10/camera.zoom;
+        moved = true;
     }
     if (keys["a"]) {
         camera.x += 10/camera.zoom;
+        moved = true;
     }
     if (keys["d"]) {
         camera.x -= 10/camera.zoom;
+        moved = true;
+    }
+    if (moved) {
+        mouseUpdate(smouse.x, smouse.y);
+    }
+    if (moving !== null) {
+        if (moving in world.gates) {
+            world.gates[moving].x = mouse.x;
+            world.gates[moving].y = mouse.y;
+        } else {
+            moving = null;
+            move_mode = false;
+        }
     }
     if (Ctouches.length === 2 && Ptouches.length === 2) {
         const p1 = getTouchPos(Ptouches[0]);
@@ -597,6 +659,20 @@ function clickHandle() {
             type: "deletegate",
             id: gate.id
         });
+        
+    } else if (move_mode) {
+        if (moving === null) {
+            moving = gate.id;
+        } else {
+            sendToHost(host, {
+                type: "movegate",
+                id: moving,
+                x: mouse.x,
+                y: mouse.y
+            });
+            moving = null;
+            move_mode = false;
+        }
     } else {
         if (gate === null) {
             return
@@ -612,6 +688,8 @@ canvas.addEventListener("mousedown", e => {
     clickHandle();
 });
 function mouseUpdate(x, y) {
+    smouse.x = x;
+    smouse.y = y;
     mouse = toWorld({x: x, y: y}, camera);
     mouse.name = myname;
     mouse.zoom = camera.zoom;
@@ -687,6 +765,7 @@ canvas.addEventListener("wheel", e => {
     // Move camera so the mouse points at the same world position
     camera.x = mouseX - worldX * camera.zoom;
     camera.y = mouseY - worldY * camera.zoom;
+    mouseUpdate(mouseX, mouseY);
 }, { passive: false });
 let primary = 0;
 canvas.addEventListener("touchstart", e => {
