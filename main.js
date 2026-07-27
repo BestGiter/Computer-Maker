@@ -690,7 +690,6 @@ canvas.addEventListener("wheel", e => {
 }, { passive: false });
 let primary = 0;
 canvas.addEventListener("touchstart", e => {
-    e.preventDefault();
     if (e.touches.length === 1) {
         primary = e.touches[0].identifier;
     }
@@ -706,21 +705,12 @@ function touchMove(e) {
     }
 }
 canvas.addEventListener("touchmove", e => {
-    e.preventDefault();
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
-    touchMove(e);
 });
 function touchEnd(e) {
-    e.preventDefault();
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
-    
-    for (const touch of e.changedTouches) {
-        if (touch.identifier === primary) {
-            clickHandle();
-        }
-    }
 }
 canvas.addEventListener("touchend", e => {
     touchEnd(e);
