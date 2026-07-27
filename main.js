@@ -522,16 +522,29 @@ function gameloop() {
         const p2 = getTouchPos(Ptouches[1]);
         const c1 = getTouchPos(Ctouches[0]);
         const c2 = getTouchPos(Ctouches[1]);
-        
-        const pmid = toWorld({x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2}, camera);
-        const cmid = toWorld({x: (c1.x + c2.x)/2, y: (c1.y + c2.y)/2}, camera);
-        
-        const pdis = Math.hypot(p2.x-p1.x, p2.y-p1.y);
-        const cdis = Math.hypot(c2.x-c1.x, c2.y-c1.y);
-        
-        camera.zoom *= cdis/pdis;
-        camera.x += cmid.x-pmid.x;
-        camera.y += cmid.y-pmid.y;
+
+        const pmidScreen = {
+            x: (p1.x + p2.x) / 2,
+            y: (p1.y + p2.y) / 2
+        };
+
+        const cmidScreen = {
+            x: (c1.x + c2.x) / 2,
+            y: (c1.y + c2.y) / 2
+        };
+
+        const worldMid = toWorld(pmidScreen, camera);
+
+        const pdis = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const cdis = Math.hypot(c2.x - c1.x, c2.y - c1.y);
+
+        const zoomFactor = cdis / pdis;
+
+        camera.zoom *= zoomFactor;
+
+        // Put the same world point under the new finger midpoint
+        camera.x = cmidScreen.x - worldMid.x * camera.zoom;
+        camera.y = cmidScreen.y - worldMid.y * camera.zoom;
     }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
