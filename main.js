@@ -2,6 +2,8 @@ room_code = "";
 host = null;
 let wiring_from = null;
 let wiring_to = null;
+let Ptouches = [];
+let Ctouches = [];
 function getPeerId() {
     let id = localStorage.getItem("peer_id");
 
@@ -81,14 +83,14 @@ function create_gate() {
     menu = !menu;
     if (menu) {
         let i = 0;
-        for (const gate of ["AND", "OR", "NOT", "LEVER"]) {
+        for (const gate of ["AND", "OR", "NOT", "LEVER", "BUFFER"]) {
             let button = document.createElement("button");
             button.innerHTML = gate;
             button.style.position = "absolute";
             button.style.bottom = String((i+1)*40)+"px"
             button.classList.add("option");
             button.onclick = () => {
-                const converted = toScreen({
+                const converted = toWorld({
                     x: canvas.width/2,
                     y: canvas.height/2
                 }, camera)
@@ -320,23 +322,48 @@ let camera = {
     y: 0,
     zoom: 1
 };
-function toScreen(thing, camera) {
+function toWorld(thing, camera) {
     return {
         x: (thing.x-camera.x)/camera.zoom,
         y: (thing.y-camera.y)/camera.zoom
     };
 }
-function toWorld(thing, camera) {
+function toScreen(thing, camera) {
     return {
         x: thing.x*camera.zoom+camera.x,
         y: thing.y*camera.zoom+camera.y
     };
 }
+function drawVignette() {
+    const gradient = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.height * 0.3,
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.height * 0.8
+    );
+
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.4)");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 function drawUI() {
     ctx.fillStyle = "white";
     ctx.font = "bold 30px monospace";
     ctx.fillText("Room: " + my_room_code, 20, 40);
-    ctx.fillRect(canvas.width/2-10, canvas.height/2-10, 20, 20);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width/2-10, canvas.height/2);
+    ctx.lineTo(canvas.width/2+10, canvas.height/2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(canvas.width/2, canvas.height/2-10);
+    ctx.lineTo(canvas.width/2, canvas.height/2+10);
+    ctx.stroke();
 }
 function drawCursor(players) {
     for (const Tmouse of players) {
@@ -375,7 +402,8 @@ const colors = {
     NOT: "blue"
 }
 const bicolors = {
-    LEVER: ["grey", "white"]
+    LEVER: ["grey", "white"],
+    BUFFER: ["grey", "white"]
 }
 function drawWorld() {
     for (const w of Object.values(world.wires)) {
@@ -398,6 +426,34 @@ window.addEventListener("keydown", e => {
 window.addEventListener("keyup", e => {
     keys[e.key] = false;
 });
+function drawGrid(camera) {
+    if (camera.zoom < 0.1) {
+        return
+    }
+    const topleft = toWorld({x: 0, y: 0}, camera);
+    const bottomright = toWorld({x: canvas.width, y: canvas.height}, camera);
+    ctx.strokeStyle = "#202020";
+    ctx.lineWidth = 1;
+    for (let x = Math.floor(topleft.x/100)*100; x < Math.ceil(bottomright.x/100)*100; x += 100) {
+        ctx.beginPath();
+        ctx.moveTo(x, topleft.y);
+        ctx.lineTo(x, bottomright.y);
+        ctx.stroke();
+    }
+    for (let y = Math.floor(topleft.y/100)*100; y < Math.ceil(bottomright.y/100)*100; y += 100) {
+        ctx.beginPath();
+        ctx.moveTo(topleft.x, y);
+        ctx.lineTo(bottomright.x, y);
+        ctx.stroke();
+    }
+}
+function getTouchPos(touch) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: touch.clientX-rect.left,
+        y: touch.clientY-rect.top
+    };
+}
 function gameloop() {
     if (host) {
         sendToHost(host, {
@@ -426,10 +482,14 @@ function gameloop() {
         for (const gate of Object.values(world.gates)) {
             let output = 1;
             let invert = false;
+            let zero = false;
+            if (gate.name == "OR" || gate.name == "BUFFER") {
+                zero = true;
+            }
             for (const input of inputs[gate.id]) {
                 if (gate.name == "AND") {
                     output = output * input;
-                } else if (gate.name == "OR") {
+                } else if (gate.name == "OR" || gate.name == "BUFFER") {
                     output = Math.max(output - input, 0);
                     invert = true;
                 } else if (gate.name == "NOT") {
@@ -440,7 +500,8 @@ function gameloop() {
                 output = gate.enabled!==undefined ? gate.enabled : 0;
                 invert = false;
             }
-            gate.value = invert ? 1-output : output;
+            let temp = invert ? 1-output : output;
+            gate.value = zero ? (inputs[gate.id].length === 0 ? 0 : temp) : temp;
         }
         
     }
@@ -456,14 +517,32 @@ function gameloop() {
     if (keys["d"]) {
         camera.x -= 10/camera.zoom;
     }
+    if (Ctouches.length === 2 && Ptouches.length === 2) {
+        const p1 = toWorld(getTouchPos(Ptouches[0]), camera);
+        const p2 = toWorld(getTouchPos(Ptouches[1]), camera);
+        const c1 = toWorld(getTouchPos(Ctouches[0]), camera);
+        const c2 = toWorld(getTouchPos(Ctouches[1]), camera);
+        
+        const pmid = {x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2};
+        const cmid = {x: (c1.x + c2.x)/2, y: (c1.y + c2.y)/2};
+        
+        const pdis = Math.hypot(p2.x-p1.x, p2.y-p1.y);
+        const cdis = Math.hypot(c2.x-c1.x, c2.y-c1.y);
+        
+        camera.zoom *= cdis/pdis;
+        camera.x += cmid.x-pmid.x;
+        camera.y += cmid.y-pmid.y;
+    }
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
+    drawGrid(camera);
     drawWorld();
     drawCursor(players);
     ctx.restore();
+    drawVignette();
     drawUI();
     requestAnimationFrame(gameloop);
 }
@@ -502,6 +581,7 @@ canvas.addEventListener("mousedown", e => {
             wiring_to = null;
         }
     } else if (delete_mode) {
+        delete_mode = false;
         sendToHost(host, {
             type: "deletegate",
             id: gate.id
@@ -522,7 +602,7 @@ canvas.addEventListener("mousemove", e => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    mouse = toScreen({x: x, y: y}, camera);
+    mouse = toWorld({x: x, y: y}, camera);
     mouse.name = myname;
     mouse.zoom = camera.zoom;
     mouse.peer_id = getPeerId();
@@ -591,5 +671,25 @@ canvas.addEventListener("wheel", e => {
     camera.x = mouseX - worldX * camera.zoom;
     camera.y = mouseY - worldY * camera.zoom;
 }, { passive: false });
+canvas.addEventListener("touchstart", e => {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
+});
+canvas.addEventListener("touchmove", e => {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
+});
+canvas.addEventListener("touchend", e => {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
+});
+canvas.addEventListener("touchcancel", e => {
+    e.preventDefault();
+    Ptouches = Ctouches;
+    Ctouches = [...e.touches];
+});
 resize();
 canvas.focus()
