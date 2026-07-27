@@ -572,9 +572,7 @@ function resize() {
     ctx = canvas.getContext("2d");
     ctx.font = "bold 30px monospace";
 }
-
-window.addEventListener("resize", resize);
-canvas.addEventListener("mousedown", e => {
+function clickHandle() {
     const gate = getGateAt(mouse.x, mouse.y);
     if (gate === null) {
         return
@@ -608,17 +606,23 @@ canvas.addEventListener("mousedown", e => {
             id: gate.id
         });
     }
+}
+window.addEventListener("resize", resize);
+canvas.addEventListener("mousedown", e => {
+    clickHandle();
 });
+function mouseUpdate(x, y) {
+    mouse = toWorld({x: x, y: y}, camera);
+    mouse.name = myname;
+    mouse.zoom = camera.zoom;
+    mouse.peer_id = getPeerId();
+}
 canvas.addEventListener("mousemove", e => {
     const rect = canvas.getBoundingClientRect();
 
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
-    mouse = toWorld({x: x, y: y}, camera);
-    mouse.name = myname;
-    mouse.zoom = camera.zoom;
-    mouse.peer_id = getPeerId();
+    mouseUpdate(x, y);
 });
 canvas.addEventListener("contextmenu", e => {
     e.preventDefault();
@@ -684,8 +688,12 @@ canvas.addEventListener("wheel", e => {
     camera.x = mouseX - worldX * camera.zoom;
     camera.y = mouseY - worldY * camera.zoom;
 }, { passive: false });
+let primary = 0;
 canvas.addEventListener("touchstart", e => {
     e.preventDefault();
+    if (e.touches.length === 1) {
+        primary = e.touches[0].identifier;
+    }
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
 });
@@ -694,15 +702,23 @@ canvas.addEventListener("touchmove", e => {
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
 });
-canvas.addEventListener("touchend", e => {
+function touchEnd(e) {
     e.preventDefault();
     Ptouches = Ctouches;
     Ctouches = [...e.touches];
+    for (const touch of e.changedTouches) {
+        if (touch.identifier === primaryTouch) {
+            const pos = getTouchPos(touch);
+            mouseUpdate(pos.x, pos.y);
+            clickHandle();
+        }
+    }
+}
+canvas.addEventListener("touchend", e => {
+    touchEnd(e);
 });
 canvas.addEventListener("touchcancel", e => {
-    e.preventDefault();
-    Ptouches = Ctouches;
-    Ctouches = [...e.touches];
+    touchEnd(e);
 });
 resize();
 canvas.focus()
